@@ -3,7 +3,7 @@ title: "Discrete-time 2016-2017"
 author: "Xuanshao Wu"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Assignments 2016-2017}
+  %\VignetteIndexEntry{2016-2017}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
