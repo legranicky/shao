@@ -1,9 +1,9 @@
 ---
-title: "Assignments Continous-time 2016-2017"
+title: "Continous-time 2016-2017"
 author: "Xuanshao Wu"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Assignments Continuous-time 2016-2017}
+  %\VignetteIndexEntry{Continuous-time 2016-2017}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
