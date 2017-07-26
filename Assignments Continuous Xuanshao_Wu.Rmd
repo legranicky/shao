@@ -1,0 +1,328 @@
+---
+title: "Assignments Continous-time 2016-2017"
+author: "Xuanshao Wu"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Assignments Continuous-time 2016-2017}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+##1. Descriptive continuous-time methods
+
+```{r, include=FALSE}
+library(survival)
+library(foreign)
+library(ggplot2)    
+library(dplyr)
+library(reshape2)
+library(knitr)
+library(memisc)
+library(lmtest)
+setwd("~/Desktop/硕士Statistics/2016-2017 1st Term/Event History Analysis/Datasets/National DatabanK Mortality (1991-1995)")
+data2 <- read.spss('QASS General & Cause-specific Mortality.sav',to.data.frame=TRUE)
+#Data file: QASS General & Cause-specific Mortality.sav
+attach(data2)
+```
+
+###1.a
+  
+  *Note*: 
+  
+  Since the table here is very long, so we only print out the first 15 observations. Please refer to the R code for details.
+  
+```{r, echo=FALSE}
+str(DEATH)
+tab.1a <- table(MONTH_CONT,DEATH)
+kable(tab.1a[1:15,])
+```
+
+###1.b
+
+```{r, include=FALSE}
+tab.1b <- table(MONTH_DISC,DEATH)
+prop.table(tab.1b)	#display cell proportions
+prop.table(tab.1b, 1)	#display row proportions
+prop.table(tab.1b, 2)	#display column proportions
+
+months <- unique(data2$MONTH_DISC)
+riskset <- vector(length=length(months))
+events <- vector(length=length(months))
+censored <- vector(length=length(months))
+riskset[1] <- 20000
+
+j <- 2
+for (i in months) {
+	 events[i+1] <- length(which(data2$MONTH_DISC==i & data2$DEATH==1))
+	 censored[i+1] <- length(which(data2$MONTH_DISC==i & data2$DEATH==0))
+	 riskset[j] <-  riskset[i+1] - (events[i+1] + censored[i+1])
+	 j <- j + 1
+}
+
+riskset <- riskset[1:36]
+
+phat <- events/riskset
+discrete.h <- phat
+actuarial.h <- events / (riskset - censored/2 - events/2)
+
+lifetable <- data.frame(months, riskset, events, censored, discrete.h, actuarial.h)
+
+lifetable$disc.surv <- rep(1, 36)
+lifetable$actu.surv <- rep(1, 36)
+
+lifetable$disc.surv[1:36] <- cumprod(1 - lifetable$discrete.h[1:36])
+lifetable$actu.surv[1:36] <- cumprod(1 - lifetable$events/(lifetable$riskset - lifetable$censored/2)[1:36])
+
+months <- ordered(months)
+
+s.hat.steps <- stepfun(months, c(1, lifetable$actu.surv))
+```
+  
+####Actuarial life-table
+```{r, echo=FALSE}
+kable(lifetable)
+```
+
+####Plot survivor funciton against exposure
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+par(mfrow=c(1,1))
+plot.1b <- plot(s.hat.steps, do.points = FALSE, xlim = c(0, 35), ylab = "Actuarial Survival", xlab = "Months", main = "Survivor function")
+```
+  
+  **Conclusion**:
+  
+  Since the line in the graph does not fluctuate much and steadily goes down, we conclude that the hazard of mortality throughout the observation period is almost stable.
+  
+###1.c 
+```{r, include=FALSE}
+#survivor function
+KM1 <- survfit(Surv(MONTH_CONT, DEATH) ~ 1, data = data2)
+summary(KM1)
+
+#No Quantile
+quantile(KM1, probs = c(0.25, 0.5, 0.75), conf.int = FALSE)
+
+#Plot the survivor function
+par(mfrow=c(1,2))
+plot(KM1, conf.int=T, mark.time=T, col=1, lty=1, lwd=1,ylim=c(0.9, 1), main="Survivor function")
+#Plot the cumulative hazard function
+plot(KM1, fun="cumhaz", ylim=c(0,0.15),mark.time=T, main="Cumulative hazard function")
+```
+    
+  We obtain the Kaplan-Meier estimate of the survivor funciton `KM1`, and the survival table can be obtained by `summary(KM1)`. Since it is a very long table, we did not print it out here.
+```{r, eval=FALSE, include=FALSE}
+summary(KM1)
+```
+  
+##### Mean and quartiles
+  
+  From the summary of the graphs above, we know that we cannot obtain mean or quartiles here, because in our research observation period, only around *8%* of participants experienced the event. And this is also why in `quantile` function in R no value is generated.
+
+  **Discussion of difference**
+  
+  Actuarial and Kaplan-Meier methods are two general types of survival analysis, and they should be performed under different conditions and purposes.
+  
+- First, actuarial analysis is used when the actual date of a survival event is unknow, but we only know the time interval. So if we plot actuarial analysis result, the graph will step only at intervals. However, Kaplan-Meier analysis is used when the actual date of ending point of a survival event is known. For instance, if the date of death is know, we can perform Kaplan-Meier analysis instead of actuarial analysis. Moreover, since we know the event ending time, the plot of Kaplan-Meier analysis result will step at every hazard time. But actuarial analysis result wil step at every group of time. So the step should be bigger in actuarial analysis comparing the Kaplan-Meier analysis.
+  
+- Second, actuarial analysis is strong when we need to study effectives. It divides the total time into constant intervals, like in 1.b 1-month, and calculate survival probability at the end of every interval. On the other hand, Kaplan-Meier analysis takes into account every event which shows up in the graph. So it will not be easy to interpret the result by graph if many events occur.
+  
+###1.d
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+logcumhaz <- function(y) {
+  to.return <- log(-log(y))
+  return(to.return)
+}
+par(mfrow=c(1,1))
+plot(KM1, fun=logcumhaz, xlim=c(0,36), ylim=c(-9,-2), lwd=1.5, lty=1, conf.int=F, mark.time=F, main="log cumulative hazard against exposure", xlab="Month")
+```
+
+###1.e
+  
+  **Martingale residuals summary**
+  
+```{r, echo=FALSE}
+#Cox regression without covariates
+cox0 <- coxph(Surv(MONTH_CONT, DEATH) ~ 1, data = data2)
+#calculate martingale residuals
+cox0res <- resid(cox0, type="martingale")
+summary(cox0res)
+```
+  
+  The definition of martingale residual of *i* is:
+  
+  $Martingale Residual_i =  Observed(N event)_i-  Expected (N events)_i = EVENT_i - Cumulative Hazard_i$
+  
+  It is the difference between the number of events observed and expected, so the sum of all martingale residual should equal to 0. This Cox regression diagnostics allow us to determine appropriate functional form for continuous predictors in the analysis.
+  
+  Since martingale residual is the difference between two values, the result can be either positive or negative. Positive result means bigger number of observed events, which means that event did occur and occurred before it was expected. On the contrary, negative result means no occurred event or it occurred after it was expected (so the number of observed event is 0, or smaller than that of expected).
+  
+##2 Cox Regression
+  
+###2.a
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+data2$marti.res <- cox0res
+data2 <- data2 %>%
+  group_by(AGE) %>% 
+  mutate(mean.marti = mean(marti.res))
+data2.2a <- dplyr::select(data2, mean.marti,AGE,MONTH_CONT)
+plot.2a <- ggplot(data= data2.2a,mapping = aes(x=AGE,y= mean.marti))
+plot.2a + geom_line()+ geom_point()+ylab("Martingale Residuals") + xlab("Age")
+```
+  
+  We can tell from the graph that for people between 60 to approximately 66 years old, the martingale residuals are negative, which indicates that no mortality or the mortality occurred later than we expected. On the other hand, for people older than 66 years old, the martingale resiiduals are positive, which indicates that mortality occurred earlier than we expected. Therefore, we suppose age should be included as a covariate in the Cox regression model.
+  
+  We suggest **linear** specification for the age effect.
+  
+###2.b
+```{r, eval=FALSE, include=FALSE}
+cox2b <- coxph(Surv(MONTH_CONT, DEATH) ~ AGE, data = data2)
+#Extract log-Likelihood
+logLik(cox2b) #-16731.5 (df=1)
+summary(cox0) #-16858.01
+1-pchisq(16858.01-16731.5,1) #0.00
+```
+
+|Model|Log Likelihood & DF|δp-value(chisq)|
+|-----|:-----:|:-----:|
+|Null model|-16858.01|Null|
+|With AGE|-16731.5 (df=1)|0.00|
+
+Table: With or without `AGE` -2LL comparison
+
+  We can use `1-pchisq` test to find out the log likelihood change between two models is significant or not. The result of log likelihood comparison between null model and model with `AGE` showed p-value much smaller than 0.05, so we consider `AGE` has significant effect, and it should be included as a covariate in the Cox regression model. The same conclusion can be made from the summary of the model with age output as below.
+  
+```{r, echo=FALSE}
+cox2b <- coxph(Surv(MONTH_CONT, DEATH) ~ AGE, data = data2)
+summary(cox2b)
+```
+
+  **Regression equation**: $log~H(t_ij)=log~H_0(t_ij)+0.0938AGE$
+  
+  According to the result above, every unit increase of age will result in 9.8% increase in the average of death hazard rate. Thus, in general, the older people are, the higher death hazard rate they are facing.
+
+###2.c
+  
+  The popurse of examining the partial residuals is to see its relation with time. If they are related, then the proportionality assumption is violated and a non-proportional model should be adopted. Follow this logic, we can try to plot partial residuals against the rank of time for predictor variable `AGE` in our previous model. This is actually one of the diagnostics of the model.
+  
+  We can obtain partial residuals directly from the previous model using `resid(cox2b, "scaledsch")`[^1]. However, `cox.zph` function in R *"calculates tests of the proportional-hazards assumption for each covariate, by correlating the corresponding set of scaled Schoenfeld residuals with a suitable transformation of time"* (Fox & Weisberg 2011:13), and we consider it a more convenience approach. The test result is as below.
+  
+```{r, echo=FALSE}
+cox.zph(cox2b)
+```
+  
+  We can tell from the p-value in the last column that it is much bigger than 0.05, which indicates no evidence of non-proportional hazards for `AGE`. If we plot the partial residuals (scaled Schoenfeld residuals) against time for `AGE`, we will have graph as below, where no obvious trend shows.
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+plot(cox.zph(cox2b))
+```
+
+###2.d
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+#Delet 'Unknown' value
+data2$EDUCATION[EDUCATION == "Unknown"] <- NA
+data2$EDUCATION <- factor(data2$EDUCATION)
+
+KM2 <- survfit(Surv(MONTH_CONT, DEATH) ~ EDUCATION, data = data2)
+par(mfrow=c(1,1))
+plot(KM2, col=c(1:10),ylim=c(0.8,1), main="Survivor function")
+legend(x = "bottomright", legend=c("None & Primary","Lower Secundary","Higher Secundary", "Higher Education"), col=c(1:10), lty=c(1,1),cex = 0.75)
+
+plot(KM2, fun="cumhaz", col=c(1:10), main="Cumulative hazard function")
+legend(x = "topleft", legend=c("None & Primary","Lower Secundary","Higher Secundary", "Higher Education"), col=c(1:10), lty=c(1,1),cex = 0.75)
+
+plot(KM2, fun=logcumhaz, col=c(1:10), main="Log cumulative hazard")
+legend(x = "bottomright", legend=c("None & Primary","Lower Secundary","Higher Secundary", "Higher Education"), col=c(1:10), lty=c(1,1),cex = 0.75)
+```
+  
+  We know that if log cumulative hazard plot shows parallel curves, then we assume that the proportionality assumption is violated. However, we can even see crossed curves in our graph, so we can conclude that the proportionality assumption is not violated.
+  
+###2.e
+```{r, include=FALSE}
+cox2e <- coxph(Surv(MONTH_CONT, DEATH) ~ EDUCATION, data = data2)
+summary(cox2e)
+logLik(cox2e) #-15529.36 (df=3)
+summary(cox0) #-16858.01
+1-pchisq(16858.01-15529.36,3) #0.00
+```
+
+|Model|Log Likelihood|δp-value(chisq)|
+|-----|:-----:|:-----:|
+|Null model|-16858.01|Null|
+|With EDUCATION|-15529.36|0.00|
+
+Table: With or without `EDUCATION` -2LL comparison
+
+  We can use `1-pchisq` test to find out the log likelihood change between two models is significant or not. The result of log likelihood comparison between null model and model with `EDUCATION` showed p-value much smaller than 0.05, so we consider `EDUCATION` has significant effect, and it should be included as a covariate in the Cox regression model. The output of model with `EDUCATION` is printed out as below.
+```{r, echo=FALSE}
+summary(cox2e)
+```
+  
+  **Regression equation**:$loga~H(t_ij)=loga~H_0(t_ij)-0.217LowerSecondary-0.238HigherSecondary-0.638HigerEducation$
+  
+  Since `EDUCATION` has 4 levels and the first one is `None & Primary`, which was treated as the reference level in our model. Therefore, comparing to people with `None & Primary` education: people with `Lower Secundary` education have 0.8 times higher (1.25 times lower) hazard rate; people with `Higher Secundary` education have 0.79 times higher (1.27 times lower) hazard rate; people with `Higher Education` have 0.53 times higher (1.89 times lower) hazard rate. It seems that the more education people received, the lower mortality rate they are facing.
+  
+  **Wald statistics**:
+  
+  Similar to a likelihood ratio test, the wald test can be also used for nested models, but it can also only estimate one model. The null hypothesis here for our model is that all coefficients we would like to observe are equal to zero, and the Wald test is to see how far these coefficients are from zero. This is because that a predictor variable with very small coefficient does not give the model a better fit.
+  
+  From the output above, we can tell that p-value for Wald test is `1.583e-09` so that we should reject the null hypothesis and we should include `EDUCATION` into our model.
+  
+  For each level of `EDUCATION`, the Wald statistics are listed under the `z` and `Pr(>|z|)` column. We can tell that coefficients of `Lower Secundary`, `Higher Secundary` and `Higher Education` are all significantly different from the reference level `None & Primary`.
+  
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+#A statistical method is called non-parametric if it makes no assumption on the population distribution or sample size.
+plot(survfit(cox2e, newdata=data.frame(EDUCATION="None & Primary")), conf.int = FALSE, col="blue", fun="cumhaz", ylim=c(0,0.1), xlab = "Month", main="Cumulative hazard")
+lines(survfit(cox2e, newdata=data.frame(EDUCATION="Lower Secundary")), conf.int = FALSE, col="red", fun="cumhaz")
+lines(survfit(cox2e, newdata=data.frame(EDUCATION="Higher Secundary")), conf.int = FALSE, col="green", fun="cumhaz")
+lines(survfit(cox2e, newdata=data.frame(EDUCATION="Higher Education")), conf.int = FALSE, col="purple", fun="cumhaz")
+legend(x = "topleft", legend=c("None & Primary", "Lower Secundary", "Higher Secundary","Higher Education"), col=c("blue", "red", "green","purple"), lty=c(1,1),cex = 0.75)
+
+plot(survfit(cox2e, newdata=data.frame(EDUCATION="None & Primary")), conf.int = FALSE, col="blue", fun=logcumhaz, xlab = "Month", main="Log cumulative hazard")
+lines(survfit(cox2e, newdata=data.frame(EDUCATION="Lower Secundary")), conf.int = FALSE, col="red", fun=logcumhaz)
+lines(survfit(cox2e, newdata=data.frame(EDUCATION="Higher Secundary")), conf.int = FALSE, col="green", fun=logcumhaz)
+lines(survfit(cox2e, newdata=data.frame(EDUCATION="Higher Education")), conf.int = FALSE, col="purple", fun=logcumhaz)
+legend(x = "bottomright", legend=c("None & Primary", "Lower Secundary", "Higher Secundary","Higher Education"), col=c("blue", "red", "green","purple"), lty=c(1,1),cex = 0.75)
+```
+  
+  We can repeat the procedure in 2.c for the result of proportionality assumption as below.
+  
+```{r, echo=FALSE}
+cox.zph(cox2e)
+```
+  
+  We can tell from the p-value in the last column that they are bigger than 0.05, which indicates no evidence of non-proportional hazards for `EDUCATION`. If we plot the partial residuals (scaled Schoenfeld residuals) against time for `EDUCATION`, we will have graph as below, where no obvious trend shows.
+```{r, echo=FALSE, fig.height=6, fig.width=6}
+par(mfrow=c(2,2))
+plot(cox.zph(cox2e))
+```
+  
+  We can also tell from the log cumulative hazard graph that no obvious parallel curves are observed, so we can conclude that the proportionality assumption is not violated.
+  
+###2.f
+  
+  Let us compare the statistics from different models.
+```{r, echo=FALSE}
+cox2f <- coxph(Surv(MONTH_CONT, DEATH) ~ EDUCATION + AGE + REGION, data = data2)
+coxae <- coxph(Surv(MONTH_CONT, DEATH) ~ EDUCATION + AGE, data = data2)
+coxre<- coxph(Surv(MONTH_CONT, DEATH) ~ EDUCATION + REGION, data = data2)
+coxar<- coxph(Surv(MONTH_CONT, DEATH) ~ AGE + REGION, data = data2)
+
+mtable("EDUCATION + AGE"=coxae, "EDUCATION + REGION"=coxre, "AGE + REGION"=coxar, "ALL"=cox2f, summary.stats=TRUE)
+```
+  
+  Both AIC and BIC suggest that the full model with three predictor variables `EDUCATION`, `AGE` and `REGION` has the best fit. We have tested effect of `AGE` and `EDUCATION` in our previous steps and the result is that both variables have significant effect on the hazard rate. The only untested variable here is `REGION`. Thus, if we compare the model fit between `EDUCATION + AGE` model and `ALL` model, we should be able to see whether adding `REGION` as a covariate will significant improve the goodness of fit or not. The comparison is listed as below.
+  
+```{r, echo=FALSE}
+lrtest(coxae, cox2f)
+```
+  
+  We can tell from the output that the p-value is much smaller than 0.05, which indicates significant improvement of goodness of fit of the full model comparing to the model without predictor variable `REGION`. Therefore, we conclude that `AGE`, `EDUCATION`, and `REGION` all have significant effect on the hazard rate.
+  
+  In general, all predictor variable `ASTATUS4`, `AGEKID2` and `HIGHDIP5` seem to have significant net-effects controlling for other two.
+
+[^1]: In the R session, the instructor told us to use "schoenfeld" argument here. However, Fox & John mentioned that this test should base on 'the scaled Schoenfeld residuals' (Fox, John. "Cox proportional-hazards regression for survival data." An R and S-PLUS companion to applied regression (2002): 1-18.). 
+
+
+
+-------------------------------------------------------------------------
+*last modified: `r Sys.Date()`*
