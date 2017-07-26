@@ -1,0 +1,594 @@
+---
+title: "Assignments Discrete-time 2016-2017"
+author: "Xuanshao Wu"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Assignments 2016-2017}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+##1.Discrete-time Models
+Data from the Fertility & Family Survey conducted in Belgium in 1991.
+
+```{r, include=FALSE}
+library(survival)
+library(foreign)
+library(ggplot2)    
+library(dplyr)
+library(reshape2)
+library(lmtest)
+library(memisc)
+library(knitr)
+setwd("~/Desktop/硕士Statistics/2016-2017 1st Term/Event History Analysis/Datasets/Fertility & Family Surveys (1991)")
+data1 <- read.spss('QASS Third Birth Hazard PPF (FFS, Belgium, 1990).sav',to.data.frame=TRUE)
+#file: QASS Third Birth Hazard PPF (FFS, Belgium, 1990)
+attach(data1)
+```
+  
+  
+###1.a Life-table for parity progression to the third hild
+  
+```{r, include=FALSE}
+#Coding is not complet, forgot that the survival function does not change from 14th interval.
+#Eventually I decided to do it in Excel directly and put the result here.
+str(data1)
+attach(data1)
+summary(EXPOSURE)
+year <- 0:19
+riskset <- vector(length=20)
+events <- vector(length=20)
+censored <- vector(length=20)
+
+for (i in year) {
+	 riskset[i+1] <- length(which(data1$EXPOSURE==i))
+	 events[i+1] <- length(which(data1$EXPOSURE==i & data1$BIRTH3==1))
+	 censored[i+1] <- length(which(data1$EXPOSURE==i & data1$BIRTH3==0 & data1$EXPOSURE == data1$MAXEXP))
+}
+
+lifetable <- data.frame(year, riskset, events, censored)
+lifetable$hazard <- events/riskset
+lifetable$survivor <- rep(1, 20)
+#cumprod:Returns a vector whose elements are the cumulative sums, products, minima or maxima of the elements of the argument.
+lifetable$survivor[1:20] <- cumprod(1-lifetable$hazard[1:20])
+lifetable$est_riskset <- rep(1, 20)
+lifetable$est_riskset[2:20] <- lifetable$riskset[1] * cumprod(lifetable$survivor[1:19])
+lifetable$est_riskset[1] <- 1160
+lifetable$hazard <- round(lifetable$hazard,2)
+lifetable$survivor <- round(lifetable$survivor,2)
+lifetable$est_riskset <- round(lifetable$est_riskset,2)
+knitr::kable(lifetable)
+```
+|   Year  | Riskset | Event | Censor | Hazard rate | Survival prob. | Survival function |  Rest  |
+|:-------:|:-------:|:-----:|:------:|:-----------:|:--------------:|:-----------------:|:------:|
+|  [0,1)  |   1160  |   20  |   84   |    0.017    |      0.983     |       1.000       |  1160  |
+|  [1,2)  |   1056  |   56  |   85   |    0.053    |      0.947     |       0.9828      |  1140  |
+|  [2,3)  |   915   |   86  |   83   |    0.094    |      0.906     |       0.931       | 1079.5 |
+|  [3,4)  |   746   |   60  |   72   |    0.080    |      0.920     |       0.843       |  978.1 |
+|  [4,5)  |   614   |   44  |   64   |    0.072    |      0.928     |       0.775       |  899.4 |
+|  [5,6)  |   506   |   32  |   53   |    0.063    |      0.937     |       0.720       |   835  |
+|  [6,7)  |   421   |   14  |   54   |    0.033    |      0.967     |       0.674       |  782.2 |
+|  [7,8)  |   353   |   12  |   55   |    0.034    |      0.966     |       0.652       |  756.1 |
+|  [8,9)  |   286   |   6   |   42   |    0.021    |      0.979     |       0.630       |  730.4 |
+|  [9,10) |   238   |   4   |   40   |    0.017    |      0.983     |       0.617       |  715.1 |
+| [10,11) |   194   |   4   |   51   |    0.021    |      0.979     |       0.606       |  703.1 |
+| [11,12) |   139   |   3   |   45   |    0.022    |      0.978     |       0.594       |  688.6 |
+| [12,13) |    91   |   1   |   32   |    0.011    |      0.989     |       0.581       |  673.7 |
+| [13,14) |    58   |   1   |   20   |    0.017    |      0.983     |       0.574       |  666.3 |
+| [14,15) |    37   |   0   |    9   |     0.00    |      1.00      |       0.565       |  654.8 |
+| [15,16) |    28   |   0   |   13   |     0.00    |      1.00      |       0.565       |  654.8 |
+| [16,17) |    15   |   0   |    7   |     0.00    |      1.00      |       0.565       |  654.8 |
+| [17,18) |    8    |   0   |    4   |     0.00    |      1.00      |       0.565       |  654.8 |
+| [18,19) |    4    |   0   |    3   |     0.00    |      1.00      |       0.565       |  654.8 |
+| [19,20) |    1    |   0   |    1   |     0.00    |      1.00      |       0.565       |  654.8 |
+
+Table: Discrte-time life-table
+  
+**Discussion**: 
+
+- The first column in the life table above is showing time passed since the birth of the second child in twelve month intervals.
+  
+- The second column is showing the risk set, that is the number of mothers with two children who still didn’t have their third child at the beginning of the corresponding interval. 
+
+- Third column is showing the number of events which means the number of mothers who had their third child by the end of the corresponding interval. 
+
+- The fourth column is showing the censored cases, the mothers who left the risk set before having their third children. 
+
+- The fifth and sixth columns are estimated values for discrete-time hazard and survivor functions respectively. Hazard rate is percentage of those who left the risk set in that interval, and survival is percentage of those who are still in the risk set as of that interval. 
+
+- Finally the last column is showing the risk set at the beginning of the period according to the survival function.
+  
+  
+###1.b
+```{r, echo=FALSE,fig.height=4, fig.width=6}
+plot_hazard <- ggplot(lifetable, aes(year, hazard)) + geom_line()+ labs(y="Hazard",x="Year since second birth")
+plot_hazard
+```
+  
+  
+**Conlusion**:  
+  We see that hazard rate peaks in the first few years following the birth of second child and then it drops very quickly after year 2 to 3, and basically becomes zero after 14 years since the birth of the second child.
+  
+  It tells us that mother who gave birth twice is likely to do the 3rd time in the following 2 or 3 years after their 2nd child birth. However, this rate drops very quickly after this period and eventually becomes 0 from 14 years and on after the 2nd child birth.
+  
+**Suggeted model**: Quadratic hazard function
+  
+  
+###1.c
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+plot_survival <- ggplot(lifetable, aes(year, survivor)) + geom_line()+ labs(y="Survival",x="Year since second birth",title="Third birth survivor")
+plot_survival
+```
+
+**Median duration**: 
+  
+  Since the line does not cross 0.5 in our result, and estimated median lifetime identifies that value of T for which the value of the estimated survival function equals 0.50, we cannot calculate the median duration of the third birth interval here.
+  
+##2. Discrete-time models
+  
+###2.a
+  
+#### (1) Constant specification
+```{r, include=FALSE}
+glm1 <- glm(BIRTH3 ~ 1, data1, family=binomial)
+summary(glm1)
+#predicted logits
+data1$predl.glm1 <- predict.glm(glm1)
+#predicted odds
+data1$predo.glm1 <- exp(data1$predl.glm1)
+#predicted probabilities
+data1$predp.glm1 <- data1$predo.glm1/(1+data1$predo.glm1)
+#Exposure is already numeric
+glm1.plot <- ggplot(data1, aes(EXPOSURE, predp.glm1)) + geom_line() + labs(y="Hazard",x="Year since second birth",title="Constant")
+exp(coef(glm1)) #intercept
+logLik(glm1)
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+glm1.plot
+```
+  
+**Regression equation**: $logit~q(t)=-2.946$
+  
+  In constant specification, we plot the exposure against the predicted probabilities, and it shows a flat line which indicates no change of the log odds of the probabilities while year since second birth varies, and it stays the same at 0.053, which is the exponent of the coefficient in model with constant specification.
+  
+#### (2) Linear specification
+```{r, include=FALSE}
+glm2 <- glm(BIRTH3 ~ EXPOSURE, data1, family=binomial)
+summary(glm2)
+data1$predl.glm2 <- predict.glm(glm2)
+data1$predo.glm2 <- exp(data1$predl.glm2)
+data1$predp.glm2 <- data1$predo.glm2/(1+data1$predo.glm2)
+glm2.plot <- ggplot(data1, aes(EXPOSURE, predp.glm2)) + geom_line()+labs(y="Hazard",x="Year since second birth",title="Linear")
+round(coef(glm2),3)
+logLik(glm2)
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+glm2.plot
+```
+  
+**Regression equation**:$logit~q(t)=-2.735-0.06t$
+  
+  In linear specification, we plot the exposure against the predicted probabilities, and it indicates that 1 unit increase of exposure will result in 0.06 decrease on the average of the log odds of the probabilities (logit hazard).
+
+#### (3) Quadratic specification
+```{r, include=FALSE}
+glm3 <- glm(BIRTH3 ~ EXPOSURE + I(EXPOSURE^2), data1, family=binomial)
+summary(glm3)
+data1$predl.glm3 <- predict.glm(glm3)
+data1$predo.glm3 <- exp(data1$predl.glm3)
+data1$predp.glm3 <- data1$predo.glm3/(1+data1$predo.glm3)
+glm3.plot <- ggplot(data1, aes(EXPOSURE, predp.glm3)) + geom_line()+ labs(y="Hazard",x="Year since second birth",title="Quadratic")
+round(coef(glm3),3)
+logLik(glm3)
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+glm3.plot
+```
+  
+**Regression equation**:$logit~q(t)=-3.322+0.421t-0.055t^2$
+  
+  This equation indicates the intercept with y-axis is `r round(exp(-3.322),3)` and the logit hazard grows bigger when year since second birth increases. But the line eventually goes down due to the effect of $-0.055t^2$.
+  
+#### (4) Cubic specification
+```{r, include=FALSE}
+glm4 <- glm(BIRTH3 ~ EXPOSURE + I(EXPOSURE^2) + I(EXPOSURE^3), data1, family=binomial)
+summary(glm4)
+data1$predl.glm4 <- predict.glm(glm4)
+data1$predo.glm4 <- exp(data1$predl.glm4)
+data1$predp.glm4 <- data1$predo.glm4/(1+data1$predo.glm4)
+glm4.plot <- ggplot(data1, aes(EXPOSURE, predp.glm4)) + geom_line()+labs(y="Hazard",x="Year since second birth",title="Cubic")
+round(coef(glm4),3)
+logLik(glm4)
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+glm4.plot
+```
+  
+**Regression equation**:$logit~q(t)=-3.604+0.798t-0.150t^2+0.006t^3$
+  
+  This equation indicates the intercept with y-axis is `r round(exp(-3.604),3)` and the logit hazard follows the similar pattern as quadratic specification first, and eventually goes up due to $0.006t^3$.
+  
+#### (5) 4th-order polynomial
+```{r, include=FALSE}
+glm5 <- glm(BIRTH3 ~ EXPOSURE + I(EXPOSURE^2) + I(EXPOSURE^3) + I(EXPOSURE^4), data=data1, family=binomial)
+summary(glm5)
+data1$predl.glm5 <- predict.glm(glm5)
+data1$predo.glm5 <- exp(data1$predl.glm5)
+data1$predp.glm5 <- data1$predo.glm5/(1+data1$predo.glm5)
+glm5.plot <- ggplot(data1, aes(EXPOSURE, predp.glm5)) + geom_line()+labs(y="Hazard",x="Year since second birth",title="4th-order")
+round(coef(glm5),3)
+logLik(glm5)
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+glm5.plot
+```
+  
+**Regression equation**:$logit~q(t)=-4.027+1.585t-0.461t^2+0.046t^3-0.002t^4$
+  
+  This equation indicates the intercept with y-axis is `r round(exp(-4.027),3)` and the logit hazard follows the similar pattern as cubic specification first, but since the last term is negative $-0.002t^4$, it will influentially affect the logit hazard and make it drop very fast at the tail.
+  
+#### (6) General specification
+```{r, include=FALSE}
+data1$EXPOSURE_fac <- as.factor(data1$EXPOSURE)
+glm6 <- glm(BIRTH3 ~ EXPOSURE_fac, data1, family=binomial)
+summary(glm6)
+data1$predl.glm6 <- predict.glm(glm6)
+data1$predo.glm6 <- exp(data1$predl.glm6)
+data1$predp.glm6 <- data1$predo.glm6/(1+data1$predo.glm6)
+glm6.plot <- ggplot(data1, aes(EXPOSURE, predp.glm6)) + geom_line()+labs(y="Hazard",x="Year since second birth",title="General")
+round(coef(glm6),3)
+logLik(glm6)
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+glm6.plot
+```
+
+**Regression equation**:$logit~q(t)= -4.043 + 1.161t_1 + 1.777t_2 + 1.607t_3...-12.523t_18 -12.523t_19$
+  
+  It is based on each year interval and dummy coding for it, so it should and it does fit the sample perfectly. (We can compare it to graph from *1.b*) The logit hazard calculation is simply $intercept+given interval$.
+
+#### (7) Combination
+```{r, include=FALSE}
+glm7 <- glm(BIRTH3 ~ EXPOSURE + I(EXPOSURE^2) + as.factor(EXP_CAT4) , data=data1, family=binomial)
+summary(glm7)
+data1$predl.glm7 <- predict(glm7)
+data1$predo.glm7 <- exp(data1$predl.glm7)
+data1$predp.glm7 <- data1$predo.glm7/(1+data1$predo.glm7)
+glm7.plot = ggplot(data1, aes(EXPOSURE,predp.glm7)) + geom_line() +labs(y="Hazard",x="Year since second birth",title="Combination")
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+glm7.plot
+```
+  
+**Regression equation**:$logit~q(t)=-4.043-0.381t+0.009t^2+1.533t_cat1+2.506t_cat2+2.673t_cat3+2.892t_cat4$
+  
+  This combination is using step function which is a combination of quadratic and categorical specifications of time, and it is more parsimonious than previous general specification. Interpretation for this model goes in two parts. For instance, for year since second birth in the first time category, the logit hazard is actually $-4.043+1.533-0.381t+0.009t^2$, and further interpretation is similar to quadratic specification. The same idea can be applied to the rest of time categories.
+  
+##### Calculate the predicted values
+  
+```{r, echo=FALSE}
+predict.2a <- aggregate(BIRTH3 ~  predp.glm1 + predp.glm2 + predp.glm3 + predp.glm4 + predp.glm5 + predp.glm6 + EXPOSURE, data=data1, FUN=mean)[,c(7,1:6)]
+colnames(predict.2a) <- c("Exposure","Constant", "Linear", "Quadratic", "Cubic", "4th-order", "General")
+kable(round(predict.2a,3), caption = "Predicted values for each interval")
+```
+  
+##### Table All model statistics
+```{r, echo=FALSE}
+mtable("Constant"=glm1, "Linear"=glm2, "Quadratic"=glm3, "Cubic"=glm4, "4th-order"=glm5, "General"=glm6, "Step"=glm7, summary.stats = TRUE)
+```
+  
+###2.b
+  
+  Since we are comparing every model to the general specification to find the best fit, we are going to use the deviance and degrees of freedom of each model from the table with all model statistics, which is put in the second column of the table below. The last column indicates the deviance and degree of freedom change are significant different from the general specification or not. The popurse is to find one model that does not significantly different from general specification so that it indicates better fit, and meanwhile, we would like to keep our model as parsimonious as possible. This significance comparison is conducted by using chi-square test as `1-pchisq(deviance_difference, df_difference)`. 
+
+|      Models      |   Deviance & DF  | δP |
+|:----------------:|:----------------:|:--:|
+|   GENERAL MODEL  | 2598.6 6850 |Null|
+|   LINEAR MODEL   | 2712.1 on 6868 | 6.661338e-16 |
+|  QUADRATIC MODEL | 2646.1  on 6867 |0.000102354|
+|    CUBIC MODEL   | 2622.3  on 6866 |**0.09626466**|
+| 4th-ORDER MODEL  | 2602.9  on 6865|**0.9965768**|
+| STEP MODEL     |2603.3  on 6864|**0.9895653**|
+
+Table:Significance comparison
+
+  
+  From the table above, we can see that under 95% confidence interval, Cubic, 4th-order and stepfunciton model are our first choices. 
+  
+  However, the step function specification does not have low enough AIC and BIC comparing to the others. So our choice limited to either Cubic or 4th-order specification.
+  
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+p2.dat <- dplyr::select(data1, EXPOSURE, starts_with("predp"), BIRTH3)
+p2.m <- melt(p2.dat, id.vars = c("EXPOSURE", "BIRTH3")) # BIRTH3 forming from wide to long format
+p2 <- ggplot(data = p2.m, aes(x=EXPOSURE, y = value, color=variable))
+p2 <- p2 + geom_line() + stat_summary(fun.y="mean", geom="point", aes(y = BIRTH3), size=3, color="black")
+p2 + ggtitle("Various baseline specifications versus observed") + ylab("(Predicted) probability") +
+  xlab("Year since second birth") + scale_color_discrete(name="Model", label=c("Constant", "Linear", "Quadratic", "Cubic", "4th-order", "General","Combination"))
+```
+  
+  Lastly, if we combine the graphs to see give a more direct view, we can find out that the Cubic specification has very poor performance on years later than 15. Therefore, we suggest `4th-order specification` to be the baseline hazard function.
+  
+###2.c 
+####Within-group hazard functions for educational attainment
+```{r, include=FALSE}
+tab.2c <- aggregate(BIRTH3 ~ EXPOSURE + I(EXPOSURE^2) + I(EXPOSURE^3) + I(EXPOSURE^4) + HIGHDIP5, mean, data=data1)
+dcast(tab.2c, EXPOSURE ~ HIGHDIP5, value.var = "BIRTH3") 
+plot.2c <- ggplot(data=tab.2c, aes(x=EXPOSURE, y=BIRTH3, color=HIGHDIP5)) + geom_line()+labs(y="Observed hazard",x="Year since second birth",title="Group by educational attainment")+stat_summary(fun.y="mean", geom="point", aes(y = BIRTH3), size = 1.5)
+plot.2c
+```
+
+```{r, include=FALSE}
+glm8 <- glm(BIRTH3 ~ EXPOSURE + I(EXPOSURE^2) + I(EXPOSURE^3)+ I(EXPOSURE^4)+ HIGHDIP5, data1, family=binomial)
+summary(glm8)
+round(coef(glm8),3)
+```
+  
+```{r, include=FALSE}
+summary(HIGHDIP5)
+```
+  
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+data1$predl.glm8 <- NA
+data1[which(!is.na(data1$HIGHDIP5)),]$predl.glm8 <- predict.glm(glm8)
+data1$predo.glm8 <- exp(data1$predl.glm8)
+data1$predp.glm8 <- data1$predo.glm8/(1+data1$predo.glm8)
+glm8.plot <- ggplot(data1, aes(EXPOSURE, predp.glm8, color=HIGHDIP5)) + geom_line()+labs(y="Hazard",x="Year since second birth",title="Group by educational attainment")
+glm8.plot
+```
+  
+  Before we draw any conclusion of the effect of educaitonal attainment on progression to the third birth, we need to compare this model to the 4th-order model.
+```{r, include=FALSE}
+mtable("4th-order"=glm5, "With educational attainment"=glm8, summary.stats = TRUE)
+```
+  
+  Unfortunately, AIC and BIC indicate different model choice for us as 4th-order specification has lower BIC and model with educaitonal attainment has lower AIC. So we conduct a chi-square test for the significance of deviance change and degree of freedom.
+
+|      Models      |   Deviance & DF  | δP |
+|:----------------:|:----------------:|:--:|
+|   Without educaiton attainment  | 2602.9  on 6865 |Null|
+|   With educaiton attainment   | 2579.9  on 6829 | 0.9542496 |
+
+Table: With or without `HIGHDIP5` comparison
+  
+  This result indicates that model with predictor variable `HIGHDIP5` does not significantly improve the model fit comparing to 4th-order baseline hazard function, so we cannot say that educaitonal attainment has significant effect on progression to the third birth.
+  
+  *Note*: 
+  
+  Since we do not conclude predictor variable `HIGHDIP5` into our model as covariate, so the regression equation here should stay the same as the 4th-order specification in *2.a(5)*.
+  
+  But if we assumed that educational attainment was necessary in the model, then the regression equation would be as follow.
+  
+  $logit~q(t)=-3.934+1.576t-0.452t^2+0.044t^3-0.001t^4-0.343(HIGHDIP5=LSE)-0.168HSE+0.07HEST+0.223UNI~HELT$
+  
+###2.d Relax the assumption of proportionality for education attainment
+  
+  Relax the assumption of proportionality for the effect of educational attainment means taking into consideration of the interaction beween educational attainment and time.
+  
+####Fitted hazard functions
+```{r, include=FALSE}
+glm9 <- glm(BIRTH3 ~ EXPOSURE*HIGHDIP5+ I(EXPOSURE^2) + I(EXPOSURE^3) + I(EXPOSURE^4), data=data1, family=binomial)
+summary(glm9)
+data1$predl.glm9 <- NA
+data1[which(!is.na(data1$HIGHDIP5)),]$predl.glm9 <- predict.glm(glm9)
+data1$predo.glm9 <- exp(data1$predl.glm9) 
+data1$predp.glm9 <- data1$predo.glm9/(1+data1$predo.glm9)
+plot.glm9 <- ggplot(data1, aes(x=EXPOSURE,y=predp.glm9, color=HIGHDIP5)) + geom_line() +labs(y="Hazard",x="Year since second birth",title="Group by educational attainment")
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+plot.glm9
+```
+  
+####Compare the deviance
+  
+  Let us compare statistics from model with or without interaciton term.
+```{r, include=FALSE}
+mtable("Assuming proportionality"=glm8, "Relaxing proportionality"=glm9, summary.stats = TRUE)
+```
+  
+  Both AIC and BIC indicate that model assuming proportionality, i.e. without interaction term, has better fit. However, from *2.c*, we concluded the insignificant effect of educaitonal attainment. So we do not think the effect of educational attainment change significantly over time. (Chi-square test indicates the same result as below.)
+  
+|      Models      |   Deviance & DF  | δP |
+|:----------------:|:----------------:|:--:|
+|   Without interaction term   | 2579.9  on 6829 |Null|
+|   With interaction term      | 2578.0  on 6825 | 0.754145 |
+
+Table: With or without interaction comparison
+
+  
+  *Note*: 
+  
+  Since we do not conclude the interaction between predictor variable `HIGHDIP5` and time into our model, so the regression equation here stays the same as the 4th-order specification in *2.a(5)*.
+  
+  But if we assumed the interaction was necessary in the model, then the regression equation would be as follow.
+  
+  $logit~q(t)=-4.192+1.656t-0.454t^2+0.044t^3-0.001t^4-0.135(HIGHDIP5=LSE)+0.112HSE+0.415HEST+0.523UNI~HELT-0.058t*LSE-0.08t*HSE-0.104t*HEST-0.091t*UNI~HELT$
+  
+###2.e
+  
+####Hazard against `AGEKID2`
+```{r, include=FALSE}
+data1$AGEKID2_fac[data1$AGEKID2 <= 20] <- "20 and yonger"
+data1$AGEKID2_fac[data1$AGEKID2 >= 21 & data1$AGEKID2 <= 24] <- "21 to 24"
+data1$AGEKID2_fac[data1$AGEKID2 >= 25 & data1$AGEKID2 <= 29] <- "25 to 29"
+data1$AGEKID2_fac[data1$AGEKID2 >= 30] <- "30 and older"
+tab.2e <- aggregate(BIRTH3 ~ EXPOSURE_fac + AGEKID2_fac, FUN=mean, data=data1)
+plot.2e <- ggplot(data = tab.2e, aes(x=as.numeric(EXPOSURE_fac), y = BIRTH3, color=AGEKID2_fac))+ geom_line()+labs(y="Observed hazard",x="Year since second birth",title="By age of the mother") +stat_summary(fun.y="mean", geom="point", aes(y = BIRTH3), size = 1.5)
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+plot.2e
+```
+  
+  We suggest a polynomial functional form to model the effect of age on the third birth hazard.
+  
+  Now, we use the 4th-order specification to plot the fitted hazard.
+  
+```{r, include=FALSE}
+glm.2e <- glm(BIRTH3 ~ EXPOSURE + I(EXPOSURE^2) +I(EXPOSURE^3) + I(EXPOSURE^4)+ AGEKID2, data1, family=binomial)
+summary(glm.2e)
+round(coef(glm.2e),3)
+#Plot
+data1$predl.glm.2e <- predict.glm(glm.2e)
+data1$predo.glm.2e <- exp(data1$predl.glm.2e)
+data1$predp.glm.2e <- data1$predo.glm.2e/(1+data1$predo.glm.2e)
+plot.2e2 <- ggplot(data1, aes(x=as.numeric(EXPOSURE), y=predp.glm.2e,group = AGEKID2,color=AGEKID2)) + geom_line(size=1.5) +labs(y="Hazard",x="Year since second birth",title="By age of the mother")
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+plot.2e2
+```
+
+####Compare the deviance
+  
+  Let us compare statistics from model with or without `AGEKID2`.
+```{r, include=FALSE}
+mtable("Without age of the mother"=glm5, "With age of the mother"=glm.2e, summary.stats = TRUE)
+```
+  
+  Both AIC and BIC indicate that model with age of the mother at the second birth has better fit. The deviance and degree of freedom chi-square test also indicates the same result. Therefore, we conclude that age of the mother at the second birth has significant effect on the third birth hazard.
+
+|      Models      |   Deviance & DF  | δP |
+|:----------------:|:----------------:|:--:|
+|   Without age of the mother   | 2602.9  on 6865 |Null|
+|   With age of the mother      | 2571.7  on 6864 | 2.327661e-08 |
+
+Table: With or without age of the mother comparison
+
+  
+  **Regression equation**: $logit~q(t)=-1.433 +1.573t -0.460t^2 +0.046t^3 -0.002t^4 -0.1AGEKID2$
+  
+  This model indicates that one unit increase of `AGEKID2`, i.e. one year older the mother is at the second birth, will result in 0.1 decrease in the log odds of the probability to have a third child controlling for time. Thus, in general, the older the mother is at the second birth, the less likely she is going to have a third child.
+  
+###2.f 
+```{r, include=FALSE}
+glm.2f <- glm(BIRTH3 ~ EXPOSURE +  I(EXPOSURE^2) +I(EXPOSURE^3)+ I(EXPOSURE^4)+  ASTATUS4, data=data1, family=binomial)
+summary(glm.2f)
+round(coef(glm.2f),3)
+data1$predl.glm.2f <- NA
+data1[which(!is.na(data1$ASTATUS4)),]$predl.glm.2f <- predict.glm(glm.2f)
+data1$predo.glm.2f <- exp(data1$predl.glm.2f)
+data1$predp.glm.2f <- data1$predo.glm.2f/(1+data1$predo.glm.2f)
+plot.2f <- ggplot(data1, aes(EXPOSURE, predp.glm.2f,color=ASTATUS4)) + geom_line(size=1.5)+labs(y="Hazard",x="Year since second birth",title="By activity status")
+```
+
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+plot.2f
+```
+
+####Compare the deviance
+  
+  Let us compare statistics from model with or without `ASTATUS4`.
+```{r, include=FALSE}
+mtable("Without activity status"=glm5, "With activity status"=glm.2f, summary.stats = TRUE)
+```
+  
+  Unfortunately, AIC and BIC indicate different model choice for us as 4th-order specification has lower BIC and model with time-varying predictor has lower AIC. So we conduct a chi-square test for the significance of deviance change and degree of freedom as below. 
+  
+
+|      Models      |   Deviance & DF  | δP |
+|:----------------:|:----------------:|:--:|
+|   Without activity status   | 2602.9  on 6865 |Null|
+|   With activity status      | 2586.5  on 6860 | 0.005790173 |
+
+Table: With or without activity status comparison
+
+  The deviance and degree of freedom chi-square test also indicates that model with activity status significantly improved the model fit, and we can add `ASTATUS4` into our model. Therefore, we conclude that time-varying covariate activity status has significant effect on the third birth hazard.
+  
+#### Interpretation
+  
+  **Regression equation**: $logit~q(t)=-4.234 +1.548t -0.449t^2 +0.044t^3 -0.001t^4 + 0.211(ASTATUS4=Part-time employment)+0.295Unemployed+0.565Other$
+  
+  This equation consists of two parts, time and activity status.
+  
+  Therefore, given time is constant, and comparing to mother who has full-time employment, mother who has part-time employment has 0.211 higher log odds, i.e. 1.23 times higher odds to have third child; unemployed mother has 0.295 higher log odds, i.e. 1.34 times higher odds to have third child; mother who is categorized in *other* has 0.565 higher log odds, i.e. 1.76 times higher odds to have third child.
+  
+  Meanwhile, given activity status is `Part-time employment`, the equation becomes $logit~q(t)=-4.234+ 0.211 +1.548t -0.449t^2 +0.044t^3 -0.001t^4$. The same idea applied to other levels of activity status.
+  
+#### Lagging covariate
+  Time-varying covariates are easy to implement in discrete-time model since our data are recorded in a person-period way. In our data, activity status of the mother can be considered as contextual and internal predictor variable. Without lagging this activity status, we would risk reverse cause. That is to say, we would not be able find the direction of the cause: either activity status affects the child birth or the child birth results in different activity status? By lagging the predictor variable by 1 year in our case, it indicates whether a ‘cause’ occurred one year earlier or not so that we can conclude that the activity status of the mother indeed has effect on third child birth.
+  
+###2.g
+```{r, include=FALSE}
+#Clean data
+data1.new <- data1[(!is.na(data1$HIGHDIP5) & !is.na(data1$ASTATUS4)),]
+#Full model
+glm.2g <- glm(BIRTH3 ~ EXPOSURE +  I(EXPOSURE^2) +I(EXPOSURE^3)+ I(EXPOSURE^4)+ ASTATUS4 + AGEKID2 + HIGHDIP5, data=data1.new, family=binomial)
+summary(glm.2g)
+#Nested model
+glmaa <- glm(BIRTH3 ~ EXPOSURE +  I(EXPOSURE^2) +I(EXPOSURE^3)+ I(EXPOSURE^4)+  ASTATUS4 + AGEKID2 ,data=data1.new, family=binomial)
+glmageh <- glm(BIRTH3 ~ EXPOSURE +  I(EXPOSURE^2) +I(EXPOSURE^3)+ I(EXPOSURE^4) + AGEKID2 + HIGHDIP5, data=data1.new, family=binomial)
+glmah <- glm(BIRTH3 ~ EXPOSURE +  I(EXPOSURE^2) +I(EXPOSURE^3)+ I(EXPOSURE^4)+  ASTATUS4 + HIGHDIP5, data=data1.new, family=binomial)
+```
+  
+  Let us compare the statistics from different models.
+```{r, include=FALSE}
+mtable("ASTATUS4+AGEKID2"=glmaa, "AGEKID2+HIGHDIP5"=glmageh, "ASTATUS4+HIGHDIP5"=glmah, "ALL"=glm.2g, summary.stats = T)
+```
+  
+  AIC indicates model with `ASTATUS4 + AGEKID2 + HIGHDIP5` is the best fit, but BIC indicates model with `AGEKID2+HIGHDIP5` is the best fit. So we conduct a chi-square test for the significance of deviance change and degree of freedom as below. Since the latter has higher deviance, we take it as the reference model.
+
+
+|      Models      |   Deviance & DF  | δP |
+|:----------------:|:----------------:|:--:|
+|   AGEKID2+HIGHDIP5 |2534.2  on 6826 |NULL|
+|ALL |2522.1  on 6823|0.007048336|
+
+Table: Nested models comparison
+
+  The result indicates that the change of deviance and degree of freedom are significant, so the full model with `ASTATUS4 + AGEKID2 + HIGHDIP5` has better fit. 
+  
+  Next, we can compare the full model with each models above in order to estimate the net-effects of each variable on the third birth hazard.
+
+|      Models      |   Deviance & DF  | δP |
+|:----------------:|:----------------:|:--:|
+|   ASTATUS4+AGEKID2   | 2550.2  on 6827 |Null|
+|ALL |2522.1  on 6823|1.190417e-05|
+|   ASTATUS4+HIGHDIP5      | 2559.1  on 6824 | Null |
+|ALL |2522.1  on 6823|1.181293e-09|
+|   AGEKID2+HIGHDIP5 |2534.2  on 6826 |Null|
+|ALL |2522.1  on 6823|0.007048336|
+
+Table:Net-effect comparison  
+
+  
+  In general, all predictor variable `ASTATUS4`, `AGEKID2` and `HIGHDIP5` seem to have significant net-effects controlling for other two.
+  
+###2.h
+  
+```{r, echo=FALSE, fig.height=4, fig.width=6}
+# Deviance residuals
+glm.2g$devres <- residuals(glm.2g, "deviance")
+# Plot residuals. Plotting them against ID number will mean taking the sum of positive and negative residuals, so we plot each person-period residual seperately.
+plot(glm.2g$devres, xlab = "Person-Period", ylab = "Deviance Residuals")
+
+# Calculate sum of squared deviance residuals for each person. The ID numbers will be saved as names to the new vector automatically
+data1.new$devres <- as.vector(glm.2g$devres)
+data1.new$ssdevres <- glm.2g$devres ^2
+deviance.2h <- aggregate(ssdevres ~ NR, data = data1.new, FUN = sum)
+qplot(deviance.2h$NR, deviance.2h$ssdevres,xlab = "Identification Number", ylab = "Sum of Squared Residuals")+ ggtitle("Sum of Squared Deviance Residuals of the Full Model")
+```
+  
+  The top 10 poorly predicted observations are listed as below.
+```{r,echo=FALSE}
+# Print out the fifty worst residuals
+tempres <- arrange(deviance.2h, desc(ssdevres))
+kable(tempres[1:10,], caption = "Top 10 poorly predicted observations")
+```
+  
+  
+###2.i 
+  
+  For research popurse, we may consider checking marital status `MSTATUS` variable. It has five levels as `UNMARRIED`, `MARRIED`, `SEPARATED`, `DIVORCED`, and `WIDOWED`. The marital status may have significant effect on the child birth, since women may prefer to having child when in marriage or when single comparing to other status. If this hypothesis is not met, then we may still be able to obtain some interesting foundings. We can consider adding `MSTATUS` as a covariate or more interaction terms to the model.
+  
+  Moreover, `REL` variables in our dataset indicates intimate relationship, partner, etc. This is very essential issue to check, and the analysis result should meet our expectation that women having steady partner or more intimate relationship should have higher rate of having children comparing to those with no intimate relationship.
+
+------------------------------------------------------------------------
+*last modified: `r Sys.Date()`*
