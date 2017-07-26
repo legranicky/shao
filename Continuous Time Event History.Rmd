@@ -1,6 +1,6 @@
 ---
-title: "Continous-time 2016-2017"
-author: "Xuanshao Wu"
+title: "Continous-time Event History 2016-2017"
+author: "Shao"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Continuous-time 2016-2017}
