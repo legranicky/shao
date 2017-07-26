@@ -1,6 +1,6 @@
 ---
 title: "Discrete-time 2016-2017"
-author: "Xuanshao Wu"
+author: "Shao"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{2016-2017}
